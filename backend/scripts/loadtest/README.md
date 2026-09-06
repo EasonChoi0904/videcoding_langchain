@@ -96,3 +96,15 @@ rem 4) 结束后: stop_backend.bat, 删除快照目录
 - 假向量使 Qdrant 检索"质量"失真但机制全真；假 rerank 分数恒过拒答阈值 → 几乎不触发拒答路径；
 - 压测客户端与服务器同机，极端并发下客户端可能成为干扰源（观测到异常可拆机对照）；
 - `_conversation_locks`（会话级锁表）随会话数增长是设计现状，S3 长跑后对比 RSS 即可量化。
+
+## 网页控制台(手动压测推荐入口)
+
+双击 `backend/scripts/loadtest/web_console.bat`(或 `python scripts/loadtest/web_console.py`)后浏览器打开 **http://127.0.0.1:9100**:
+
+- 点选场景卡(S0~S6)→ 输入**虚拟用户数**与时长 → 勾选"自动起/造数" → 开始压测
+- 后台自动:起全新 mock 服务器 → 造数(演示库+100 账号) → 跑场景 → 实时进度输出
+- 完成后可直接在页内打开 HTML 报告(新标签页)或定位到报告目录
+- 页面上另有 启动/停止服务器 与 停止压测 按钮;所有报告照常落 `data/loadtest_reports/`
+
+接口:`POST /api/run{scenario,users,duration,auto_server}` · `GET /api/status` · `POST /api/stop|/api/server/start|stop|/api/open` · `GET /report/<tag>/<file>`
+(仅监听 127.0.0.1,勿暴露公网;压测发生器在独立子进程,与被测服务器隔离)
