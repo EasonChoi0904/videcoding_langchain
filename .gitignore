@@ -1,0 +1,14 @@
+# 根级 .gitignore：frontend 与根目录杂项
+# （backend/ 内的 .env/.venv/data/__pycache__ 等已由 backend/.gitignore 覆盖）
+
+# ---- 前端 ----
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# ---- 门禁临时标记（tester/quality-engineer 写入，提交成功后自动清理）----
+.quality-gates/
+
+# ---- 杂项 ----
+*.log
+.DS_Store

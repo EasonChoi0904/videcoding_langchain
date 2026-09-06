@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+
+# 本地数据(业务库/向量库/上传文件/日志,体积大不入库)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# 环境配置(含真实密钥)
+.env
+
+# IDE
+.idea/
+.vscode/

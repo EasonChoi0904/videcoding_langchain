@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(/.quality-gates/**)",
+      "Edit(/.claude/agents/**)",
+      "Bash(node .claude/hooks/worktree-fingerprint.mjs *)"
+    ]
+  }
+}

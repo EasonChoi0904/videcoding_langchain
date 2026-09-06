@@ -1,0 +1,4 @@
+#!/bin/sh
+# 提交门禁：提交前校验 tester/quality-engineer 通过标记 + 代码指纹（见 .claude/hooks/git-commit-gate.mjs）
+# 拒绝时打印原因并以非零退出码阻止提交；紧急绕过：git commit --no-verify
+node .claude/hooks/git-commit-gate.mjs git-pre

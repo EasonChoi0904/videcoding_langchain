@@ -1,0 +1,42 @@
+# ===== Web 框架 =====
+fastapi>=0.115
+uvicorn[standard]>=0.34
+python-multipart>=0.0.20          # 文件上传 multipart 解析
+httpx>=0.28                       # 异步 HTTP(百炼 API 调用)
+
+# ===== ORM / 数据库 =====
+sqlalchemy[asyncio]>=2.0.43       # 异步 ORM(可平滑迁移 PostgreSQL)
+aiosqlite>=0.20                   # SQLite 异步驱动
+
+# ===== 数据校验 / 配置 =====
+pydantic>=2.12
+pydantic-settings>=2.7
+
+# ===== LangChain(RAG 核心框架)=====
+langchain>=0.3.20
+langchain-openai>=0.3.5           # OpenAI 兼容接口(对接百炼)
+langchain-community>=0.3.20
+langchain-text-splitters>=0.3.7   # 文本分块器
+
+# ===== 向量库(Qdrant 嵌入式本地模式)=====
+qdrant-client>=1.15
+
+# ===== AI 供应商 SDK(openai 兼容客户端)=====
+openai>=1.70
+
+# ===== 认证安全 =====
+PyJWT>=2.10
+bcrypt>=4.3
+
+# ===== 文档解析 =====
+pymupdf>=1.25                     # PDF(文本+表格抽取)
+python-docx>=1.1                  # Word
+pandas>=2.3                       # Excel/CSV
+openpyxl>=3.1                     # xlsx 引擎
+beautifulsoup4>=4.13              # HTML 清洗
+html2text>=2024.2.26
+lxml>=5.3                         # bs4 解析加速
+
+# ===== 测试 =====
+pytest>=8.3
+pytest-asyncio>=0.25
