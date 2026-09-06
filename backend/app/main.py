@@ -47,6 +47,14 @@ async def lifespan(app: FastAPI):
             logger.info("已清理 %d 条遗留的半截消息(解除生成中标记)", result.rowcount)
         await db.commit()
 
+    # ---- 2.75 压测 mock 层(仅 LOADTEST_MOCK_PROVIDER=1 时生效,dev-only)----
+    # 挂在 init_infra 之前:mock 层就位后再初始化向量库/启动 worker,
+    # 保证任何业务外呼发生前已全部替换为本地假实现
+    if settings.loadtest_mock_provider:
+        from app.rag import mock_provider
+
+        mock_provider.install()
+
     # ---- 3. 向量库与百炼 API 探测(M2 起生效)----
     from app.services import infra  # noqa: F401
     await infra.init_infra()

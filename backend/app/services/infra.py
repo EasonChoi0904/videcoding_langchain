@@ -18,7 +18,10 @@ async def init_infra() -> None:
     vector_store.ensure_collections()
 
     # ---- 百炼 API Key 检查与能力探测(缺 Key 只告警不阻塞启动)----
-    if not s.dashscope_api_key:
+    # 压测 mock 模式:即便 .env 存在真实 Key 也跳过探测,保证零真实外呼
+    if s.loadtest_mock_provider:
+        logger.info("[loadtest] mock 模式启动:跳过百炼能力探测,不发起任何真实外呼")
+    elif not s.dashscope_api_key:
         logger.warning("未配置 DASHSCOPE_API_KEY,AI 问答/入库向量化将在调用时失败。请在 backend/.env 填写。")
     else:
         from app.rag import provider

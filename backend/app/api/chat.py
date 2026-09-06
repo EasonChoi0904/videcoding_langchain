@@ -38,8 +38,8 @@ router = APIRouter(tags=["问答"])
 # 同一会话的并发锁(防多轮上下文错乱)
 _conversation_locks: dict[int, asyncio.Lock] = {}
 _conversation_locks_guard = asyncio.Lock()
-# 全局并发生成的信号量(防止瞬时打满百炼 QPS/本地带宽)
-_stream_semaphore = asyncio.Semaphore(4)
+# 全局并发生成的信号量(防止瞬时打满百炼 QPS/本地带宽;并发上限可经 STREAM_CONCURRENCY 调整,默认 4)
+_stream_semaphore = asyncio.Semaphore(get_settings().stream_concurrency)
 
 # 内容落库周期:流式期间每隔该秒数把累积文本刷进数据库(断线少丢)
 _FLUSH_INTERVAL = 1.0

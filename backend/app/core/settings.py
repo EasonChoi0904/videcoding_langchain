@@ -6,6 +6,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ 目录的绝对路径(本文件位于 backend/app/core/ 下)
@@ -95,6 +96,11 @@ class Settings(BaseSettings):
     rate_login_per_minute: int = 5      # 登录接口:同 IP+用户名 每分钟次数
     rate_ask_per_minute: int = 20       # 问答接口:每用户每分钟次数
     rate_register_per_hour: int = 10    # 注册接口:同 IP 每小时次数
+
+    # ==================== 压测 / Mock(仅开发环境,默认关闭)====================
+    loadtest_mock_provider: bool = False   # True=装 dev-only mock 层(假 embedding/rerank/LLM),跳过启动探测,零真实外呼
+    # ge=1:并发 0/负值会让 Semaphore(0) 把全部问答静默挂死
+    stream_concurrency: int = Field(4, ge=1, description="全局流式生成并发上限(原 chat.py 硬编码 4,压测可调大探顶)")
 
     # ==================== 上传限制 ====================
     max_file_size_mb: int = 50
