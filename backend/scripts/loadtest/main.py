@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """压测 CLI 编排入口。
 
-用法(在 backend/ 目录,压测服务器已由 start_*_backend.bat 拉起):
-    .venv\\Scripts\\python -m scripts.loadtest.main --scenario setup
-    .venv\\Scripts\\python -m scripts.loadtest.main --scenario s0
+用法(在 backend/ 目录;压测服务器可由 start_*_backend.bat 或 --manual 自动拉起):
+    .venv\\Scripts\\python -m scripts.loadtest.main --scenario setup   # 造数
     .venv\\Scripts\\python -m scripts.loadtest.main --scenario s1 --users 100
-    .venv\\Scripts\\python -m scripts.loadtest.main --scenario s5 --duration 600
-    .venv\\Scripts\\python -m scripts.loadtest.main --scenario s4 --real   # 真实百炼链路
+    .venv\\Scripts\\python -m scripts.loadtest.main --scenario s5 --duration 300
+    .venv\\Scripts\\python -m scripts.loadtest.main --manual            # 交互向导(自动起停服务器/造数/生成并打开 HTML 报告)
+    .venv\\Scripts\\python -m scripts.loadtest.main --quick             # 非交互冒烟:全自动小跑一遍(自检用)
+    .venv\\Scripts\\python -m scripts.loadtest.main --scenario s4 --real   # 真实百炼链路(需快照库)
 """
 import argparse
 import asyncio
@@ -43,10 +44,9 @@ async def _check_mock_server() -> None:
     """--expect-mock 时校验服务器确为 mock 模式(读 server.log 的 ASCII 标记)。"""
     import os
 
-    from .config import BACKEND_DIR
+    from .config import BACKEND_DIR, MOCK_DATA_DIR
 
-    data_dir = os.getenv("DATA_DIR", str(BACKEND_DIR / "data" / "_loadtest"))
-    log_path = os.path.join(data_dir, "server.log")
+    log_path = os.getenv("DATA_DIR", str(MOCK_DATA_DIR)) + os.sep + "server.log"
     if not os.path.exists(log_path):
         print("[warn] 未找到 server.log,跳过 mock 校验(确保服务器是 mock 模式启动)")
         return
@@ -62,7 +62,6 @@ async def s4_real(base: str, opts: dict) -> None:
     sent = 0
     lock = asyncio.Lock()
 
-    # 在快照库上注册 5 个新用户(默认限流 10/h/IP 内,安全)
     names = [f"lt_real_{i:02d}" for i in range(5)]
     accounts: list[user_mod.Account] = []
     async with httpx.AsyncClient(timeout=30.0) as c:
@@ -124,26 +123,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", default=API_BASE, dest="base", help="后端 API 地址")
     p.add_argument("--expect-mock", action="store_true", help="断言服务器为 mock 模式")
     p.add_argument("--real", action="store_true", help="真实百炼链路模式(s4 用)")
+    p.add_argument("--manual", action="store_true", help="交互向导(自动起停服务器/造数/报告)")
+    p.add_argument("--quick", action="store_true", help="非交互小冒烟(自检用)")
     return p
 
 
-async def main() -> None:
-    args = build_parser().parse_args()
+async def run_scenario(args: argparse.Namespace):
+    """按参数跑一个场景并落盘报告,返回 summary 字典(由 CLI/向导共用)。"""
     base = args.base
     sc = args.scenario
 
     if not await _health(base):
-        raise SystemExit(f"服务器不可达: {base}/health —— 请先启动压测服务器(start_*_backend.bat)")
+        raise SystemExit(f"服务器不可达: {base}/health —— 请先启动压测服务器(--manual 可自动拉起)")
 
     if sc == "s4" or args.real:
-        # 真实链路:不放大限流、不造数;直接走 s4_real
         opts = {"users": args.users or 5, "duration": args.duration or 240,
                 "ramp_per_sec": args.ramp or 1}
         print(f"[s4] 真实百炼链路冒烟: {opts['users']} VU × {opts['duration']}s (总量 ≤150 asks)")
         await s4_real(base, opts)
         health = await M.stop_health_probe()
-        R.finalize({"scenario": "s4", "real_api": True, "opts": opts}, health, tag=f"s4-real-{int(time.time())}")
-        return
+        return R.finalize({"scenario": "s4", "real_api": True, "opts": opts}, health,
+                          tag=f"s4-real-{int(time.time())}")
 
     if args.expect_mock:
         await _check_mock_server()
@@ -154,7 +154,7 @@ async def main() -> None:
         accounts = await seeding.run_setup(base)
     if sc == "setup":
         await seeding.run_setup(base)
-        return
+        return None
 
     cfg = SCENARIOS.get(sc, SCENARIOS["s0"])
     opts = {
@@ -163,7 +163,6 @@ async def main() -> None:
         "ramp_per_sec": args.ramp or cfg["ramp_per_sec"],
         "with_register": True,
     }
-    # 账号不足时补齐(一般不会)
     while len(accounts) < opts["users"]:
         more = await user_mod.seed_accounts(base, opts["users"] - len(accounts), USER_PASS)
         accounts.extend(more)
@@ -184,7 +183,22 @@ async def main() -> None:
     print(f"[{sc}] 执行结束,耗时 {time.monotonic() - t0:.0f}s,正在汇总…")
     meta = {"scenario": sc, "users": opts["users"], "duration": opts["duration"],
             "mock": True, "server": base}
-    R.finalize(meta, health, tag=f"{sc}-{opts['users']}u-{int(time.time())}")
+    return R.finalize(meta, health, tag=f"{sc}-{opts['users']}u-{int(time.time())}")
+
+
+async def main() -> None:
+    args = build_parser().parse_args()
+    if args.manual:
+        from . import manual
+
+        await manual.wizard(args)
+        return
+    if args.quick:
+        from . import manual
+
+        await manual.quick()
+        return
+    await run_scenario(args)
 
 
 if __name__ == "__main__":

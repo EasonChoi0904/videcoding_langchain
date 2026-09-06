@@ -28,6 +28,22 @@ scripts\loadtest\run.bat --scenario s3 --users 100 --duration 600
 scripts\loadtest\stop_backend.bat           rem 结束后按命令行标记精确停服务器
 ```
 
+## 手动执行向导（推荐日常使用，全自动）
+
+```bat
+rem 双击即可:自动起/停 mock 服务器、自动造数、交互选场景、跑完自动打开 HTML 报告
+backend\scripts\loadtest\manual_test.bat
+
+rem 或命令行等价物:
+cd backend
+.venv\Scripts\python -m scripts.loadtest.main --manual
+.venv\Scripts\python -m scripts.loadtest.main --quick    rem 非交互小冒烟(自检)
+```
+
+向导流程：起全新 mock 服务器（临时库）→ 自动造数（演示知识库 + 100 账号）→
+选场景（s0/s1/s2/s3/s5/s6/s4 指引）→ 回车用默认参数 → 每次跑完自动打开
+**HTML 报告**（`backend/data/loadtest_reports/<tag>/index.html`，自包含可打印/进论文）→ 退出时可选停服。
+
 场景列表：`setup`(造数) / `s0`(校准) / `s1`(登录风暴) / `s2`(读操作并发) /
 `s3`(mock 问答 100 并发,主场景) / `s5`(混合用户旅程) / `s6`(上传风暴) / `s4`(真实链路冒烟)。
 

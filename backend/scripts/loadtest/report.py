@@ -184,6 +184,7 @@ def finalize(meta: dict, health: list[dict], tag: str) -> dict:
     }
     with open(dir_ / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
+    html_path = _write_html(summary, dir_)
 
     # 控制台汇总
     print("\n================ 场景汇总:", tag, "================")
@@ -201,4 +202,84 @@ def finalize(meta: dict, health: list[dict], tag: str) -> dict:
     if skipped:
         print("跳过(不适用):", ", ".join(skipped))
     print(f"报告目录: {dir_}")
+    print(f"HTML 报告: {html_path}")
     return summary
+
+
+# ==================== HTML 报告(自包含单文件,可直接双击打开/打印/放论文)====================
+def _write_html(s: dict, dir_: Path) -> Path:
+    """由 summary.json 渲染自包含 HTML:概览卡 + 门禁 + 逐操作延迟 + 错误/429/探针。"""
+    import html as H
+
+    esc = H.escape
+    meta = s.get("meta", {})
+
+    def badge(ok: bool) -> str:
+        return ('<span class="pass">PASS</span>' if ok else '<span class="fail">FAIL</span>')
+
+    gates_rows = ""
+    for k, v in s.get("passes", {}).items():
+        cls, label = ("g", "PASS") if v else ("r", "FAIL")
+        gates_rows += f"<tr><td>{esc(k)}</td><td class='{cls}'>{label}</td></tr>"
+    if s.get("skipped_gates"):
+        gates_rows += ("<tr><td colspan='2' class='muted'>跳过(不适用): "
+                       + esc("、".join(s["skipped_gates"])) + "</td></tr>")
+
+    op_rows = ""
+    for op, d in s.get("per_op", {}).items():
+        op_rows += (f"<tr><td>{esc(op)}</td><td>{d['n']}</td>"
+                    f"<td>{d['p50']}</td><td>{d['p95']}</td><td>{d['p99']}</td></tr>")
+
+    err_detail = s.get("error_detail", {})
+    err_bits = "、".join(f"{esc(k)}={v}" for k, v in sorted(err_detail.items()) if v) or "无"
+    ask = s.get("ask")
+    hp = s.get("health_probe", {})
+    ask_html = ""
+    if ask:
+        ask_html = (f"<p><b>ask 完成率</b> {ask['done_rate']*100:.2f}% ({ask['done']}/{ask['n']})</p>")
+    card = (
+        f"<p class='muted'>场景 {esc(str(meta.get('scenario', '')))} · 服务器 {esc(str(meta.get('server', '')))}"
+        f" · 执行于 {esc(str(s.get('time', '')))}</p>"
+        f"<div class='cards'>"
+        f"<div class='card'><div class='num'>{s.get('total_requests', 0)}</div>请求总数</div>"
+        f"<div class='card'><div class='num'>{s.get('ok', 0)}</div>成功(ok)</div>"
+        f"<div class='card'><div class='num bad'>{s.get('errors', 0)}</div>错误</div>"
+        f"<div class='card'><div class='num warn'>{s.get('throttled_429', 0)}</div>429 限流</div>"
+        f"<div class='card'><div class='num warn'>{s.get('client_4xx', 0)}</div>4xx</div>"
+        f"</div>"
+        f"<p><b>错误明细</b>: {err_bits}</p>"
+    )
+    if ask:
+        card += ask_html
+    card += (
+        f"<p><b>事件循环探针(/api/health)</b>: p95={hp.get('p95_ms')}ms · 最大={hp.get('max_ms')}ms · "
+        f">2s 尖峰 ×{hp.get('spikes_over_2s', 0)}</p>"
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>压测报告 {esc(s.get('tag',''))}</title>
+<style>
+ body{{font-family:'Microsoft YaHei',sans-serif;margin:24px auto;max-width:960px;color:#222;background:#fafbfc}}
+ h1{{font-size:20px}} h2{{font-size:15px;margin-top:28px;border-left:4px solid #3b82f6;padding-left:8px}}
+ table{{border-collapse:collapse;width:100%;font-size:13px}}
+ th,td{{border:1px solid #e2e8f0;padding:6px 10px;text-align:left}}
+ th{{background:#f1f5f9}} td.g{{color:#16a34a;font-weight:bold}} td.r{{color:#dc2626;font-weight:bold}}
+ .pass{{color:#16a34a;font-weight:bold}} .fail{{color:#dc2626;font-weight:bold}}
+ .muted{{color:#64748b}} .bad{{color:#dc2626}} .warn{{color:#d97706}}
+ .cards{{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}}
+ .card{{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 18px;text-align:center}}
+ .num{{font-size:26px;font-weight:bold}}
+</style></head><body>
+<h1>RAG 系统压力测试报告</h1>
+{card}
+<h2>门禁判定</h2><table><tr><th>判据</th><th>结果</th></tr>{gates_rows}</table>
+<h2>逐操作延迟(ok 样本, ms)</h2>
+<table><tr><th>操作</th><th>次数</th><th>p50</th><th>p95</th><th>p99</th></tr>{op_rows}</table>
+<h2>附注</h2>
+<p class='muted'>报告文件: {esc(str(dir_))} · 逐请求明细 metrics.csv · 吞吐 rps.csv · 探针 health_probe.csv。
+判据按场景适用;429 为产品限流/DashScope 限流预期行为,不进错误率。</p>
+</body></html>"""
+    out = dir_ / "index.html"
+    out.write_text(html, encoding="utf-8")
+    return out

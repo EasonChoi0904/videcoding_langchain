@@ -49,7 +49,9 @@ THINK_MEAN_SECONDS = 4.0
 # ==================== 路径约定 ====================
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent   # backend/
 REPORT_ROOT = BACKEND_DIR / "data" / "loadtest_reports"
-ACCOUNTS_FILE = BACKEND_DIR / "data" / "_loadtest" / "accounts.json"
+MOCK_DATA_DIR = BACKEND_DIR / "data" / "_loadtest"
+ACCOUNTS_FILE = MOCK_DATA_DIR / "accounts.json"
+VENV_PY = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"    # 压测服务器启动器用
 
 # 上传风暴素材:每份唯一 txt 的目标分块数(约 500 字/块)
 UPLOAD_DOC_CHARS = 8000
