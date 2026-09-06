@@ -14,6 +14,7 @@ from . import metrics as M
 from . import questions as Q
 from .config import ASK_BUDGET_PER_MIN, THINK_MEAN_SECONDS
 from .seeding import LOADTEST_KB, make_unique_doc_text
+from . import users as user_mod
 from .sse_client import ask_sse
 from .users import Account
 
@@ -234,13 +235,15 @@ async def s5_journey(base: str, accounts: list[Account], opts: dict) -> None:
 
     async def one(acc: Account, idx: int) -> None:
         vu = Vu(base, acc, time.monotonic() + opts["duration"])
+        reg_n = [0]  # 本 VU 的注册序号(生成唯一新用户名,避免跨轮重名)
         try:
             await vu.ensure_conv()
             while time.monotonic() < vu.deadline:
                 # 思考间隔(指数分布,均值 4s,封顶 20s)
                 await asyncio.sleep(min(random.expovariate(1 / THINK_MEAN_SECONDS), 20))
                 roll = vu.rnd.random() * 100
-                if roll < 35:
+                # 分支边界与 config.MIX_S5_CUMULATIVE 一一对应(合计 100)
+                if roll < 34:
                     # ask 桶空时自动改选读操作
                     if time.monotonic() < vu._next_ask_at:
                         await vu.list_convs()
@@ -252,20 +255,43 @@ async def s5_journey(base: str, accounts: list[Account], opts: dict) -> None:
                             if res["status"] == 200 and res["json"]:
                                 kb_id = vu.rnd.choice(res["json"]).get("id")
                         await vu.ask(q, kb_id)
-                elif roll < 50:
+                elif roll < 48:
                     await vu.list_convs()
-                elif roll < 65:
+                elif roll < 69:
                     cid = vu.conv_id or await vu.ensure_conv()
                     await vu.http("list_messages", "GET", f"/conversations/{cid}/messages")
-                elif roll < 75:
+                elif roll < 78:
                     res = await vu.http("new_conv", "POST", "/conversations", json={"language": "zh"})
                     if res["status"] == 200:
                         vu.conv_id = res["json"]["id"]
-                elif roll < 85:
+                elif roll < 87:
                     await vu.http("list_kbs", "GET", "/kb/public")
+                elif roll < 91:
+                    # 存量用户重登:成功则换新令牌继续(bcrypt 成本混入混合流,观测口径同 S1)
+                    t0 = time.monotonic()
+                    pair = await user_mod.login(vu.client, base, acc.username, acc.password)
+                    await M.record("login", "ok" if pair else "auth_fail", 200 if pair else None,
+                                   (time.monotonic() - t0) * 1000)
+                    if pair:
+                        acc.set_tokens(pair)
                 elif roll < 93:
-                    cid = vu.conv_id or await vu.ensure_conv()
-                    await vu.http("list_messages", "GET", f"/conversations/{cid}/messages")
+                    # 新用户注册访问:仅测注册接口不切换身份;409(重跑同名)=视为成功
+                    reg_n[0] += 1
+                    name = f"n{idx:02d}r{reg_n[0]:03d}"
+                    t0 = time.monotonic()
+                    code = await user_mod.register(vu.client, base, name, acc.password)
+                    ms = (time.monotonic() - t0) * 1000
+                    if code in (200, 201, 409):
+                        cls, shown = "ok", code
+                    elif code == 0:
+                        cls, shown = "connect_error", None
+                    elif code == 429:
+                        cls, shown = "429", code
+                    elif code >= 500:
+                        cls, shown = "5xx", code
+                    else:
+                        cls, shown = "4xx", code
+                    await M.record("register", cls, shown, ms)
                 elif roll < 96:
                     await vu.http("auth_me", "GET", "/auth/me")
                 elif roll < 98:
@@ -280,7 +306,7 @@ async def s5_journey(base: str, accounts: list[Account], opts: dict) -> None:
                                 "feedback", "POST", f"/messages/{last['id']}/feedback",
                                 json={"value": 1 if vu.rnd.random() < 0.7 else -1},
                             )
-                else:  # conv_ops:改名
+                else:  # 改名会话
                     cid = vu.conv_id or await vu.ensure_conv()
                     if cid:
                         await vu.http(

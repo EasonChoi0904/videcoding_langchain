@@ -30,19 +30,30 @@ SCENARIOS = {
 # 主场景建议:LOADTEST_MOCK_LLM_CHUNK_DELAY_MS=45 + TOTAL_CHARS=520(全流≈2.9s)
 # 轻量冒烟档:默认 15ms + 320 字符(全流≈0.9s)
 
-# ==================== S5 混合旅程动作概率(与 lifecycle.s5_journey 实现一一对应)====================
-# 说明:ask 受 ASK_BUDGET_PER_MIN 桶约束,桶空时自动降级为读操作;refresh 不占动作——
-# 令牌 401 时由 Account.request 自动轮换,无需独立动作;conv_ops 具体化为 改名。
+# ==================== S5 混合旅程动作概率(与 lifecycle.s5_journey 实现一一对应,合计=100)====================
+# 说明:
+# - ask 受 ASK_BUDGET_PER_MIN 桶约束,桶空时自动降级为读操作;
+# - refresh 不占动作——令牌 401 时由 Account.request 自动轮换,无需独立动作;
+# - login = 存量用户定期重登(成功后换新令牌继续),register = 新用户注册访问(仅测接口,不切换身份);
+# - 注册/登录命中率低,避免 bcrypt-12 排队把混合场景退化成 S1(单独压过)。
 MIX_S5 = {
-    "ask": 35,           # 每 3.4s 一次的提问预算
-    "list_convs": 15,
-    "list_messages": 23,  # 50-65 与 85-93 两段合计
-    "new_conv": 10,
-    "list_kbs": 10,
+    "ask": 34,           # 每 3.4s 一次的提问预算
+    "list_convs": 14,
+    "list_messages": 21,
+    "new_conv": 9,
+    "list_kbs": 9,
+    "login": 4,          # 存量用户重登(约每 2 分钟/人)
+    "register": 2,       # 新用户注册访问(约每 4 分钟/人)
     "auth_me": 3,
     "feedback": 2,
     "rename_conv": 2,
 }
+# 累积概率边界(与 MIX_S5 顺序一致,lifecycle.s5_journey 按此路由)
+MIX_S5_CUMULATIVE = {
+    "ask": 34, "list_convs": 48, "list_messages": 69, "new_conv": 78, "list_kbs": 87,
+    "login": 91, "register": 93, "auth_me": 96, "feedback": 98, "rename_conv": 100,
+}
+assert sum(MIX_S5.values()) == 100, "S5 动作概率合计必须为 100"
 # 每 VU 思考间隔:指数分布均值(秒)
 THINK_MEAN_SECONDS = 4.0
 
